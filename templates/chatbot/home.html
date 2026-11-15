@@ -1,0 +1,400 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Llama Chatbot</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+
+<body class="chat-page">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+
+        <div class="sidebar-top">
+            <div class="sidebar-brand">
+                <h2 class="logo">Llama</h2>
+            </div>
+
+            <button class="new-chat" id="new-chat">
+                <span>＋</span>
+                New chat
+            </button>
+
+            <div class="search-box">
+                <span>⌕</span>
+                <input type="text" id="history-search" placeholder="Search chats">
+            </div>
+
+            <p class="history-title">Your chats</p>
+
+            <div class="chat-list" id="chat-list">
+
+                {% for chat in chats %}
+                <div class="chat-item" data-id="{{ chat.id }}">
+                    <span class="chat-name">{{ chat.title }}</span>
+
+                    <button class="delete-btn" data-id="{{ chat.id }}" title="Delete chat">
+                        ×
+                    </button>
+                </div>
+                {% empty %}
+                <p class="empty-history">No conversations yet.</p>
+                {% endfor %}
+
+            </div>
+        </div>
+
+        <div class="user-info">
+            <div class="user-avatar">
+                {{ request.user.username|first|upper }}
+            </div>
+
+            <div class="user-details">
+                <strong>{{ request.user.username }}</strong>
+                <span>Personal account</span>
+            </div>
+
+            <form method="POST" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button class="logout-btn" type="submit" title="Logout">
+                    ↪
+                </button>
+            </form>
+        </div>
+
+    </aside>
+
+
+    <!-- Main chat area -->
+    <main class="main">
+
+        <header class="header">
+            <div class="header-title">
+                <h3>Llama Chatbot</h3>
+                <span class="model-name">Llama 3.2:1b</span>
+            </div>
+        </header>
+
+
+        <!-- Messages -->
+        <div class="messages" id="messages">
+
+            <div class="welcome" id="welcome">
+                <h2>What can I help with?</h2>
+                <p>Start a conversation with Llama.</p>
+            </div>
+
+        </div>
+
+
+        <!-- Message input -->
+        <div class="input-container">
+            <form class="input-area" id="chat-form">
+
+                {% csrf_token %}
+
+                <input type="text" id="message-input" placeholder="Message Llama..." autocomplete="off" required>
+
+                <button class="send-btn" id="send-button" type="submit" title="Send message">
+                    ↑
+                </button>
+
+            </form>
+
+            <p class="input-note">Llama can make mistakes. Check important information.</p>
+        </div>
+
+    </main>
+
+
+    <script>
+
+        const messages = document.getElementById("messages");
+        const input = document.getElementById("message-input");
+        const form = document.getElementById("chat-form");
+        const button = document.getElementById("send-button");
+        const chatList = document.getElementById("chat-list");
+        const searchInput = document.getElementById("history-search");
+
+        const csrf = document.querySelector(
+            '[name=csrfmiddlewaretoken]'
+        ).value;
+
+        let currentChatId = null;
+
+
+        // Display messages
+        function addMessage(content, role) {
+
+            const div = document.createElement("div");
+
+            div.classList.add("message", role);
+            div.textContent = content;
+
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+
+            return div;
+        }
+
+
+        // Clear chat window
+        function clearMessages() {
+            messages.innerHTML = "";
+        }
+
+
+        // Show welcome screen
+        function showWelcome() {
+
+            clearMessages();
+
+            const welcome = document.createElement("div");
+
+            welcome.className = "welcome";
+            welcome.innerHTML = `
+                <h2>What can I help with?</h2>
+                <p>Start a conversation with Llama.</p>
+            `;
+
+            messages.appendChild(welcome);
+        }
+
+
+        // Create new chat
+        document.getElementById("new-chat")
+            .addEventListener("click", function () {
+
+                currentChatId = null;
+
+                showWelcome();
+
+                document.querySelectorAll(".chat-item")
+                    .forEach(item => item.classList.remove("active"));
+
+                input.focus();
+            });
+
+
+        // Send message
+        form.addEventListener("submit", async function (event) {
+
+            event.preventDefault();
+
+            const message = input.value.trim();
+
+            if (!message || button.disabled) return;
+
+            const welcome = document.getElementById("welcome");
+
+            if (welcome) welcome.remove();
+
+            addMessage(message, "user");
+
+            input.value = "";
+            button.disabled = true;
+
+            const loading = addMessage(
+                "Llama is thinking...",
+                "bot"
+            );
+
+            try {
+
+                const response = await fetch("/chat/", {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": csrf
+                    },
+
+                    body: JSON.stringify({
+                        message: message,
+                        chat_id: currentChatId
+                    })
+
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Request failed");
+                }
+
+                currentChatId = data.chat_id;
+
+                loading.textContent = data.response;
+
+                await loadChatList();
+
+            }
+
+            catch (error) {
+
+                loading.textContent = "Error: " + error.message;
+
+            }
+
+            finally {
+
+                button.disabled = false;
+                input.focus();
+
+            }
+
+        });
+
+
+        // Load previous conversation
+        async function openChat(chatId) {
+
+            const response = await fetch(`/history/${chatId}/`);
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                alert(data.error || "Could not load conversation.");
+                return;
+            }
+
+            currentChatId = chatId;
+
+            clearMessages();
+
+            data.messages.forEach(msg => {
+
+                addMessage(
+                    msg.content,
+                    msg.role === "user" ? "user" : "bot"
+                );
+
+            });
+
+            document.querySelectorAll(".chat-item")
+                .forEach(item => {
+
+                    item.classList.toggle(
+                        "active",
+                        Number(item.dataset.id) === Number(chatId)
+                    );
+
+                });
+
+        }
+
+
+        // Load chat sidebar
+        async function loadChatList() {
+
+            const response = await fetch("/");
+            const html = await response.text();
+
+            const parser = new DOMParser();
+
+            const doc = parser.parseFromString(
+                html,
+                "text/html"
+            );
+
+            const newList = doc.getElementById("chat-list");
+
+            if (newList) {
+
+                chatList.innerHTML = newList.innerHTML;
+
+                filterChats();
+
+            }
+
+        }
+
+
+        // Search conversations
+        function filterChats() {
+
+            const searchTerm = searchInput.value.toLowerCase();
+
+            document.querySelectorAll(".chat-item")
+                .forEach(item => {
+
+                    const title = item.querySelector(".chat-name")
+                        .textContent.toLowerCase();
+
+                    item.style.display = title.includes(searchTerm)
+                        ? "flex"
+                        : "none";
+
+                });
+
+        }
+
+        searchInput.addEventListener("input", filterChats);
+
+
+        // Sidebar click handling
+        chatList.addEventListener("click", function (event) {
+
+            const deleteButton = event.target.closest(".delete-btn");
+
+            if (deleteButton) {
+
+                deleteChat(deleteButton.dataset.id);
+                return;
+
+            }
+
+            const item = event.target.closest(".chat-item");
+
+            if (item) {
+
+                openChat(item.dataset.id);
+
+            }
+
+        });
+
+
+        // Delete conversation
+        async function deleteChat(chatId) {
+
+            if (!confirm("Delete this conversation?")) return;
+
+            const response = await fetch(
+                `/delete-chat/${chatId}/`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "X-CSRFToken": csrf
+                    }
+                }
+            );
+
+            const data = await response.json();
+
+            if (data.success) {
+
+                if (Number(currentChatId) === Number(chatId)) {
+
+                    currentChatId = null;
+                    showWelcome();
+
+                }
+
+                await loadChatList();
+
+            }
+
+        }
+
+    </script>
+
+</body>
+
+</html>

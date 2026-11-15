@@ -1,0 +1,66 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sign Up | Llama</title>
+
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+
+<body class="auth-page">
+
+    <div class="auth-card">
+
+        <div class="auth-logo">
+            Llama
+        </div>
+
+        <h2>Create your account</h2>
+
+        <p class="auth-subtitle">
+            Get started with your personal AI assistant.
+        </p>
+
+        {% for message in messages %}
+        <div class="auth-error">
+            {{ message }}
+        </div>
+        {% endfor %}
+
+        <form method="POST">
+
+            {% csrf_token %}
+
+            <label>Username</label>
+
+            <input type="text" name="username" placeholder="Enter your username" required>
+
+            <label>Email address</label>
+
+            <input type="email" name="email" placeholder="Enter your email" required>
+
+            <label>Password</label>
+
+            <input type="password" name="password" placeholder="Create a password" required>
+
+            <button type="submit" class="auth-submit">
+                Create Account
+            </button>
+
+        </form>
+
+        <div class="auth-footer">
+            Already have an account?
+            <a href="{% url 'login' %}">Login</a>
+        </div>
+
+    </div>
+
+</body>
+
+</html>
